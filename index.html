@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <!-- השורה הזו גורמת לדף להיראות טוב גם בטלפון -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>נחש את המספר</title>
+
+  <style>
+    /* ===== עיצוב כללי של הדף ===== */
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;               /* מרכז את הכרטיס באמצע המסך */
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #a1c4fd, #c2e9fb);
+      padding: 16px;
+      box-sizing: border-box;
+      overflow-x: hidden;          /* שהקונפטי לא ייצור פס גלילה */
+    }
+
+    /* ===== הכרטיס הלבן במרכז ===== */
+    .card {
+      background: white;
+      width: 100%;
+      max-width: 440px;
+      padding: 32px 24px;
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      text-align: center;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      margin-top: 0;
+      color: #3b5bdb;
+      font-size: 2rem;
+    }
+
+    .instructions {
+      font-size: 1.2rem;
+      color: #444;
+    }
+
+    /* ===== שדה הקלט והכפתורים ===== */
+    input {
+      width: 100%;
+      font-size: 1.8rem;
+      padding: 14px;
+      margin: 12px 0;
+      border: 3px solid #a5b4fc;
+      border-radius: 14px;
+      text-align: center;
+      box-sizing: border-box;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #3b5bdb;
+    }
+
+    button {
+      width: 100%;
+      font-size: 1.6rem;
+      padding: 14px;
+      border: none;
+      border-radius: 14px;
+      color: white;
+      background: #3b5bdb;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #2f4ac0;
+    }
+
+    /* כפתור "שחק שוב" - ירוק, ומוסתר בהתחלה */
+    #playAgainButton {
+      background: #2b8a3e;
+      margin-top: 12px;
+      display: none;
+    }
+
+    /* ===== אזור ההודעה ===== */
+    #message {
+      min-height: 1.5em;
+      margin: 20px 0 8px;
+      padding: 12px;
+      font-size: 1.6rem;
+      font-weight: bold;
+      border-radius: 14px;
+    }
+
+    /* צבע שונה לכל סוג הודעה */
+    .too-high { background: #ffe3e3; color: #c92a2a; }   /* אדום - גבוה מדי */
+    .too-low  { background: #e7f5ff; color: #1864ab; }   /* כחול - נמוך מדי */
+    .correct  { background: #d3f9d8; color: #2b8a3e; }   /* ירוק - צדקת */
+    .error    { background: #fff3bf; color: #a35f00; }   /* צהוב - קלט לא תקין */
+
+    #counter {
+      font-size: 1.1rem;
+      color: #555;
+    }
+
+    /* ===== רשימת הניחושים הקודמים ===== */
+    #history {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+
+    .chip {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+
+    /* ===== חגיגה: חתיכות קונפטי שנופלות ===== */
+    .confetti {
+      position: fixed;
+      top: -20px;
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      animation: fall linear forwards;
+      pointer-events: none;   /* שלא יפריעו ללחוץ על הכפתורים */
+    }
+
+    @keyframes fall {
+      to {
+        transform: translateY(110vh) rotate(720deg);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>🎯 נחש את המספר</h1>
+    <p class="instructions">חשבתי על מספר בין 1 ל-100. נסו לנחש!</p>
+
+    <!-- type="text" כדי שנוכל לבדוק בעצמנו אם הוקלדו אותיות -->
+    <input id="guessInput" type="text" inputmode="numeric" placeholder="הקלידו מספר" autocomplete="off">
+    <button id="guessButton">נחש</button>
+
+    <div id="message"></div>
+    <div id="counter"></div>
+    <div id="history"></div>
+
+    <button id="playAgainButton">שחק שוב 🔄</button>
+  </div>
+
+  <script>
+    // ===== חיבור לאלמנטים שבדף =====
+    const guessInput = document.getElementById("guessInput");
+    const guessButton = document.getElementById("guessButton");
+    const message = document.getElementById("message");
+    const counter = document.getElementById("counter");
+    const history = document.getElementById("history");
+    const playAgainButton = document.getElementById("playAgainButton");
+
+    // ===== משתנים של המשחק =====
+    let secretNumber;   // המספר שהמחשב בחר
+    let attempts;       // כמה ניסיונות השחקן עשה
+    let gameOver;       // האם השחקן כבר ניצח
+
+    // מתחילים משחק חדש: בוחרים מספר ומאפסים הכול
+    function startNewGame() {
+      // Math.random() נותן מספר בין 0 ל-1, ומזה יוצרים מספר שלם בין 1 ל-100
+      secretNumber = Math.floor(Math.random() * 100) + 1;
+      attempts = 0;
+      gameOver = false;
+
+      message.textContent = "";
+      message.className = "";
+      counter.textContent = "";
+      history.innerHTML = "";
+      guessInput.value = "";
+      guessInput.disabled = false;
+      guessButton.disabled = false;
+      playAgainButton.style.display = "none";
+      guessInput.focus();
+    }
+
+    // מציגים הודעה בצבע המתאים
+    function showMessage(text, type) {
+      message.textContent = text;
+      message.className = type;   // הצבע נקבע לפי ה-class שב-CSS
+    }
+
+    // מוסיפים ניחוש לרשימת הניחושים הקודמים
+    function addToHistory(number, type) {
+      const chip = document.createElement("span");
+      chip.className = "chip " + type;
+      // חץ למעלה = צריך מספר גדול יותר, חץ למטה = צריך מספר קטן יותר
+      let arrow = "✓";
+      if (type === "too-high") arrow = "⬇";
+      if (type === "too-low") arrow = "⬆";
+      chip.textContent = number + " " + arrow;
+      history.appendChild(chip);
+    }
+
+    // הפונקציה הראשית: בודקת את הניחוש של השחקן
+    function checkGuess() {
+      if (gameOver) return;
+
+      const text = guessInput.value.trim();   // trim מוריד רווחים מיותרים
+
+      // בדיקה 1: השדה ריק
+      if (text === "") {
+        showMessage("לא הקלדתם כלום 🙂 הקלידו מספר", "error");
+        return;
+      }
+
+      // בדיקה 2: יש משהו שהוא לא ספרות (אותיות, נקודה, מינוס...)
+      // הביטוי /^[0-9]+$/ אומר: "רק ספרות, מההתחלה ועד הסוף"
+      if (!/^[0-9]+$/.test(text)) {
+        showMessage("אפשר להקליד רק מספרים שלמים", "error");
+        return;
+      }
+
+      const guess = Number(text);   // הופכים את הטקסט למספר
+
+      // בדיקה 3: המספר מחוץ לטווח
+      if (guess < 1 || guess > 100) {
+        showMessage("המספר צריך להיות בין 1 ל-100", "error");
+        return;
+      }
+
+      // הקלט תקין - סופרים ניסיון
+      attempts = attempts + 1;
+      counter.textContent = "מספר ניסיונות: " + attempts;
+
+      // משווים את הניחוש למספר הסודי
+      if (guess > secretNumber) {
+        showMessage("גבוה מדי ⬇", "too-high");
+        addToHistory(guess, "too-high");
+      } else if (guess < secretNumber) {
+        showMessage("נמוך מדי ⬆", "too-low");
+        addToHistory(guess, "too-low");
+      } else {
+        showMessage("צדקת! 🎉", "correct");
+        addToHistory(guess, "correct");
+        counter.textContent = "ניחשתם ב-" + attempts + " ניסיונות!";
+        gameOver = true;
+        guessInput.disabled = true;
+        guessButton.disabled = true;
+        playAgainButton.style.display = "block";
+        celebrate();
+      }
+
+      // מנקים את השדה לניחוש הבא
+      guessInput.value = "";
+      guessInput.focus();
+    }
+
+    // חגיגה: יוצרים 80 חתיכות קונפטי צבעוניות שנופלות מלמעלה
+    function celebrate() {
+      const colors = ["#ff6b6b", "#ffd43b", "#69db7c", "#4dabf7", "#da77f2", "#ffa94d"];
+      for (let i = 0; i < 80; i++) {
+        const piece = document.createElement("div");
+        piece.className = "confetti";
+        piece.style.left = Math.random() * 100 + "vw";          // מיקום אקראי לרוחב המסך
+        piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+        piece.style.animationDuration = 2 + Math.random() * 2 + "s";  // מהירות אקראית
+        piece.style.animationDelay = Math.random() * 0.5 + "s";
+        document.body.appendChild(piece);
+        // מוחקים את החתיכה אחרי 5 שניות, כדי לא להעמיס על הדף
+        setTimeout(function () { piece.remove(); }, 5000);
+      }
+    }
+
+    // ===== חיבור הכפתורים והמקלדת =====
+    guessButton.addEventListener("click", checkGuess);
+    playAgainButton.addEventListener("click", startNewGame);
+
+    // לחיצה על Enter בשדה הקלט = כמו לחיצה על "נחש"
+    guessInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        checkGuess();
+      }
+    });
+
+    // מתחילים את המשחק הראשון כשהדף נטען
+    startNewGame();
+  </script>
+
+</body>
+</html>
